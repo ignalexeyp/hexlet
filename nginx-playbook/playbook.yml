@@ -1,0 +1,64 @@
+---
+- name: Install and configure Nginx
+  hosts: all
+  become: yes
+  vars:
+    nginx_port: 80
+
+  tasks:
+    - name: Fix broken dependencies using command
+      command: apt --fix-broken install -y
+      register: fix_result
+      failed_when: fix_result.rc != 0 and 'Could not get lock' not in fix_result.stderr
+      changed_when: fix_result.stdout != ""
+      when: ansible_os_family == "Debian"
+
+    - name: Update apt cache
+      apt:
+        update_cache: yes
+        cache_valid_time: 3600
+      when: ansible_os_family == "Debian"
+
+    - name: Install nginx
+      apt:
+        name: nginx
+        state: present
+      when: ansible_os_family == "Debian"
+      notify: restart nginx
+
+    - name: Install nginx for RedHat family
+      yum:
+        name: nginx
+        state: present
+      when: ansible_os_family == "RedHat"
+      notify: restart nginx
+
+    - name: Copy index.html
+      copy:
+        src: files/index.html
+        dest: /usr/share/nginx/html/index.html
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart nginx
+
+    - name: Copy nginx configuration
+      copy:
+        src: files/nginx.conf
+        dest: /etc/nginx/nginx.conf
+        owner: root
+        group: root
+        mode: '0644'
+      notify: restart nginx
+
+    - name: Ensure nginx is running and enabled
+      service:
+        name: nginx
+        state: started
+        enabled: yes
+
+  handlers:
+    - name: restart nginx
+      service:
+        name: nginx
+        state: restarted
